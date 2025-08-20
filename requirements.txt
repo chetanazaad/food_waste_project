@@ -1,5 +1,12 @@
+<<<<<<< HEAD
 pandas
 matplotlib
 seaborn
 streamlit
+=======
+pandas
+matplotlib
+seaborn
+streamlit
+>>>>>>> c83fa4b60526dd0e3adf2f6f168472fa8e967e23
 ipykernel
