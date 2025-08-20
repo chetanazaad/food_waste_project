@@ -47,6 +47,8 @@ def setup_database(conn):
             if os.path.exists(csv_file):
                 try:
                     df = pd.read_csv(csv_file)
+                    # Clean column names before inserting into SQL
+                    df.columns = df.columns.str.strip()
                     df.to_sql(table_name, conn, if_exists='append', index=False)
                 except Exception as e:
                     st.error(f"Error loading data for {table_name}: {e}")
@@ -192,7 +194,7 @@ def main():
             st.subheader("2. Top Contributing Food Provider Type")
             top_provider_type = pd.read_sql_query("SELECT p.Type, SUM(fl.Quantity) AS TotalQuantityDonated FROM Providers p JOIN Food_Listings fl ON p.Provider_ID = fl.Provider_ID GROUP BY p.Type ORDER BY TotalQuantityDonated DESC LIMIT 1;", conn)
             if not top_provider_type.empty:
-                st.metric(label="Top Contributor", value=top_provider_type['Type'][0], delta=f"{int(top_provider_type['TotalQuantityDonated'][0])} units donated")
+                st.metric(label="Top Contributor (by Quantity)", value=top_provider_type['Type'][0], delta=f"{int(top_provider_type['TotalQuantityDonated'][0])} units donated")
             st.subheader("4. Total Quantity of Available Food")
             total_quantity_available = pd.read_sql_query("SELECT SUM(Quantity) AS TotalQuantity FROM Food_Listings;", conn)
             if not total_quantity_available.empty:
@@ -227,13 +229,51 @@ def main():
         st.divider()
         col5, col6 = st.columns(2)
         with col5:
-            st.subheader("12. Most Claimed Meal Types")
+            st.subheader("12. Most Claimed Meal Types (All Claims)")
             meal_type_claims = pd.read_sql_query("SELECT fl.Meal_Type, COUNT(c.Claim_ID) as ClaimCount FROM Claims c JOIN Food_Listings fl ON c.Food_ID = fl.Food_ID GROUP BY fl.Meal_Type ORDER BY ClaimCount DESC;", conn)
             st.bar_chart(meal_type_claims.set_index('Meal_Type'))
         with col6:
             st.subheader("13. Total Food Donated per Provider")
             provider_donations = pd.read_sql_query("SELECT p.Name, SUM(fl.Quantity) as TotalQuantity FROM Providers p JOIN Food_Listings fl ON p.Provider_ID = fl.Provider_ID GROUP BY p.Name ORDER BY TotalQuantity DESC LIMIT 10;", conn)
             st.dataframe(provider_donations)
+        
+        # --- NEW ANALYSIS SECTION ---
+        st.divider()
+        st.subheader("Additional Insights")
+        col7, col8 = st.columns(2)
+
+        with col7:
+            st.subheader("14. Provider with Most Listings (by Count)")
+            provider_listings = pd.read_sql_query("""
+                SELECT Provider_Type, COUNT(Food_ID) AS NumberOfListings
+                FROM Food_Listings
+                GROUP BY Provider_Type
+                ORDER BY NumberOfListings DESC;
+            """, conn)
+            
+            if not provider_listings.empty:
+                top_provider = provider_listings.iloc[0]
+                st.metric(label=f"Top Provider: {top_provider['Provider_Type']}", value=f"{top_provider['NumberOfListings']} listings")
+                with st.expander("See full breakdown of listings by provider"):
+                    st.dataframe(provider_listings)
+
+        with col8:
+            st.subheader("15. Most Successfully Claimed Meal Type")
+            most_claimed_meal = pd.read_sql_query("""
+                SELECT fl.Meal_Type, COUNT(c.Claim_ID) as ClaimCount
+                FROM Claims c
+                JOIN Food_Listings fl ON c.Food_ID = fl.Food_ID
+                WHERE c.Status = 'Completed'
+                GROUP BY fl.Meal_Type
+                ORDER BY ClaimCount DESC;
+            """, conn)
+
+            if not most_claimed_meal.empty:
+                top_meal = most_claimed_meal.iloc[0]
+                st.metric(label=f"Top Meal: {top_meal['Meal_Type']}", value=f"{top_meal['ClaimCount']} successful claims")
+                with st.expander("See full breakdown of successful claims"):
+                    st.dataframe(most_claimed_meal)
+
 
     conn.close()
 
